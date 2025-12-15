@@ -113,7 +113,7 @@ def load_cpu_iostat():
     lines = [line.strip() for line in result.stdout.splitlines() if line.strip()]
     i = 0
     node = get_node(lines[0])[4]
-    node = 4
+    node = 4 ### EDIT REMOVE ME WHEN RUNNING ON PLEIADI
     chassis = [0,0,0,0]
     
     try:
@@ -138,42 +138,47 @@ def scale_x(values, scaler):
     Scale values and returns the tensor containing it.
     """
 
-    feature_cols = [
-        'nprocs',
-        'cb_nodes',
-        'maxblocks',
-        'cpu_user_start_0',   
-        'cpu_nice_start_0' ,
-        'cpu_system_start_0' ,
-        'cpu_iowait_start_0',
-        'cpu_steal_start_0'  ,
-        'cpu_idle_start_0',
-        "time"    ,
-        "day"         
-    ]  
+    # feature_cols = [
+    #     'nprocs',
+    #     'cb_nodes',
+    #     'maxblocks',
+    #     'cpu_user_start_0',   
+    #     'cpu_nice_start_0' ,
+    #     'cpu_system_start_0' ,
+    #     'cpu_iowait_start_0',
+    #     'cpu_steal_start_0'  ,
+    #     'cpu_idle_start_0',
+    #     "time"    ,
+    #     "day"         
+    # ]  
 
-    values_to_be_scaled = np.array(values[:11]).reshape(1,-1)
-    values_to_be_scaled = pd.DataFrame(values_to_be_scaled, columns=feature_cols)
-    values_scaled = scaler.transform(values_to_be_scaled)
+    # values_to_be_scaled = np.array(values[:11]).reshape(1,-1)
+    # values_to_be_scaled = pd.DataFrame(values_to_be_scaled, columns=feature_cols)
+    # values_scaled = scaler.transform(values_to_be_scaled)
 
-    for value in values[11:]:
-         values_scaled = np.append(values_scaled, value)
+    # for value in values[11:]:
+    #      values_scaled = np.append(values_scaled, value)
+
+    values_scaled = scaler.transform(values)
+
 
     return tensor(values_scaled, dtype=float32).unsqueeze(0)
 
 
 
-def load_model(Input_layer=16, Hidden_layer_1=256, Hidden_layer_2=128):
+def load_model(Input_layer=16, Hidden_layer_1=256, Hidden_layer_2=128, Hidden_layer_3=64):
 
     Output_layer = 1
 
     Model = nn.Sequential(nn.Dropout(p=0.00), nn.ReLU(),
-                        nn.Linear(Input_layer, Hidden_layer_1),
-                        nn.Dropout(p=0.05), nn.ReLU(),
-                        nn.Linear(Hidden_layer_1, Hidden_layer_2),
-                        nn.Dropout(p=0.05), nn.ReLU(),
-                        nn.Linear(Hidden_layer_2, Output_layer))
-    
+                          nn.Linear(Input_layer, Hidden_layer_1),
+                          nn.Dropout(p=0.05), nn.ReLU(),
+                          nn.Linear(Hidden_layer_1, Hidden_layer_2),
+                          nn.Dropout(p=0.05), nn.ReLU(),
+                          nn.Linear(Hidden_layer_2, Hidden_layer_3),
+                          nn.Dropout(p=0.05), nn.ReLU(),
+                          nn.Linear(Hidden_layer_3, Output_layer))
+
     model_path = os.path.join(MODELS_DIR, 'best_model.pth')
 
     Model.load_state_dict(load(model_path,  weights_only=True))
@@ -227,14 +232,11 @@ class InputBuilder:
     def build_tensor(self):
         """Costruisce tensore finale."""
         vals = [self.values[c] for c in self.feature_cols]
-        df_vals = pd.DataFrame([vals], columns=self.feature_cols)
-        scaled = self.scaler.transform(df_vals)
+        extra = list(self.values["chassis"]) + [self.values["status"]]
+        df_vals = np.array(vals + extra).reshape(1, -1)
+        final_vals = self.scaler.transform(df_vals)
 
-        extra = [self.values["status"]] + list(self.values["chassis"])
-        final_vals = np.concatenate([scaled.flatten(), extra])
-
-        return tensor(final_vals, dtype=float32).unsqueeze(0)
-
+        return tensor(final_vals, dtype=float32)
     def grid_variants(self, param_grid):
         """
         Genera combinazioni valide rispettando vincoli.
