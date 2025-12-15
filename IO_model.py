@@ -1,14 +1,14 @@
 import torch
 import joblib
 from utils import misc as m
-
+import numpy as np
 import os
 
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
 UTILS_DIR = os.path.join(BASE_DIR, 'utils')
 MODELS_DIR = os.path.join(UTILS_DIR, 'models')
-xscaler_path = os.path.join(MODELS_DIR, 'scaler_X.pkl')
-yscaler_path = os.path.join(MODELS_DIR, 'scaler_Y.pkl')
+xscaler_path = os.path.join(MODELS_DIR, 'scaler.pkl')
+#yscaler_path = os.path.join(MODELS_DIR, 'scaler_Y.pkl')
 
 nprocs, maxblocks = m.get_running_settings()
 
@@ -28,11 +28,7 @@ if nprocs*maxblocks != 2000 and nprocs*maxblocks != 32000: # controlla se siamo 
 else:
     procs_to_check.append((nprocs, maxblocks))
 
-#x_batch = torch.tensor([0, 0, 0, 0,0.545029, 0.0, 0.058350, 0,0,0.449111, 0.333333, 0.166667, 0.0, 1.0, 0.0, 0.0, 0.0], dtype=torch.float32).unsqueeze(0)
-
 xscaler = joblib.load(xscaler_path)
-yscaler = joblib.load(yscaler_path)
-
 
 ib = m.InputBuilder(xscaler)
 ib.fill_runtime_values(chassis, cpu_stat, time, day)
@@ -47,13 +43,18 @@ with torch.no_grad():
         ib.set(nprocs=couple[0], maxblocks=couple[1])
         for t in ib.grid_variants({"cb_nodes":[1,2,8,16], "status":[0,1]}):
             y = Model(t)
-
             tensor_runtimes = t.detach().numpy()
-            status = "independent" if tensor_runtimes[0][11] == 1 else "collective"
-    
-            tensor_runtimes = xscaler.inverse_transform(tensor_runtimes[0][:11].reshape(1,-1))[0]
+            if np.isclose(tensor_runtimes[0][15], -0.9312661, atol=1e-6):
+                status = "independent"
+            elif np.isclose(tensor_runtimes[0][15], 1.0738069, atol=1e-6):
+                status = "collective"
+            else:
+                print('Something went wrong. Unable to catch writing mode')
+                print(tensor_runtimes[0][15])
+                exit()
+            tensor_runtimes = xscaler.inverse_transform(tensor_runtimes[0].reshape(1,-1))[0]
 
-            orig_y_pred = yscaler.inverse_transform(y.detach().numpy())
+            orig_y_pred = y.detach().numpy()
 
             if orig_y_pred[0][0] > high_performance[0]:
                 high_performance[0] = orig_y_pred[0][0]
