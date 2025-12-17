@@ -113,7 +113,6 @@ def load_cpu_iostat():
     lines = [line.strip() for line in result.stdout.splitlines() if line.strip()]
     i = 0
     node = get_node(lines[0])[4]
-    node = 4 ### EDIT REMOVE ME WHEN RUNNING ON PLEIADI
     chassis = [0,0,0,0]
     
     try:
