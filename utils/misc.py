@@ -166,26 +166,51 @@ def scale_x(values, scaler):
 
 
 
-def load_model(Input_layer=16, Hidden_layer_1=256, Hidden_layer_2=128, Hidden_layer_3=64):
+def load_model_mpi(Input_layer=16, Hidden_layer_1=256, Hidden_layer_2=128, Hidden_layer_3=64):
 
     Output_layer = 1
 
-    Model = nn.Sequential(nn.Dropout(p=0.00), nn.ReLU(),
+    Model = nn.Sequential(nn.ReLU(),
                           nn.Linear(Input_layer, Hidden_layer_1),
-                          nn.Dropout(p=0.05), nn.ReLU(),
+                          nn.ReLU(),
                           nn.Linear(Hidden_layer_1, Hidden_layer_2),
-                          nn.Dropout(p=0.05), nn.ReLU(),
+                          nn.ReLU(),
                           nn.Linear(Hidden_layer_2, Hidden_layer_3),
-                          nn.Dropout(p=0.05), nn.ReLU(),
+                          nn.ReLU(),
                           nn.Linear(Hidden_layer_3, Output_layer))
 
-    model_path = os.path.join(MODELS_DIR, 'best_model.pth')
+    model_path = os.path.join(MODELS_DIR, 'best_model_mpi.pth')
 
     Model.load_state_dict(load(model_path,  weights_only=True))
 
     Model.eval()
 
     return Model
+
+def load_model(model_name, Input_layer=16, Hidden_layer_1=256, Hidden_layer_2=128, Hidden_layer_3=64):
+
+    Output_layer = 1
+
+    Model = nn.Sequential(
+                          nn.Linear(Input_layer, Hidden_layer_1),
+                          nn.ReLU(),
+                          nn.Linear(Hidden_layer_1, Hidden_layer_2),
+                          nn.ReLU(),
+                          nn.Linear(Hidden_layer_2, Hidden_layer_3),
+                          nn.ReLU(),
+                          nn.Linear(Hidden_layer_3, Output_layer))
+    
+    if model_name == 'runtime':
+        model_path = os.path.join(MODELS_DIR, 'best_model_runtime.pth')
+    elif model_name =='mpi':
+        model_path = os.path.join(MODELS_DIR, 'best_model_mpi.pth')
+        
+    Model.load_state_dict(load(model_path,  weights_only=True))
+
+    Model.eval()
+
+    return Model
+
 
 class InputBuilder:
     def __init__(self, scaler):
@@ -228,12 +253,13 @@ class InputBuilder:
         self.values["chassis"] = chassis
         self.values["time"] = time
         self.values["day"] = day
-
+        
     def build_tensor(self):
         """Costruisce tensore finale."""
         vals = [self.values[c] for c in self.feature_cols]
         extra = list(self.values["chassis"]) + [self.values["status"]]
         df_vals = np.array(vals + extra).reshape(1, -1)
+        df_vals = pd.DataFrame(df_vals, columns=self.scaler.feature_names_in_)
         final_vals = self.scaler.transform(df_vals)
 
         return tensor(final_vals, dtype=float32)
