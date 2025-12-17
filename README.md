@@ -3,7 +3,7 @@
 This repository contains a demonstration of an Artificial Neural Network (ANN)-based approach for optimizing parallel I/O in FLASH.  
 The model predicts MPI I/O performance given simulation parameters and system-level indicators, and suggests the configuration expected to provide the best efficiency.  
 
-**N.b** Since the model has been trained on Pleiadi OACT, it can correctly guess there.
+**N.b** Since the model has been trained on Pleiadi OACT, it can correctly estimate on that machine.
 
 ---
 
