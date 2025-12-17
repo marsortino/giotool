@@ -7,8 +7,12 @@ import os
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
 UTILS_DIR = os.path.join(BASE_DIR, 'utils')
 MODELS_DIR = os.path.join(UTILS_DIR, 'models')
-xscaler_path = os.path.join(MODELS_DIR, 'scaler.pkl')
-#yscaler_path = os.path.join(MODELS_DIR, 'scaler_Y.pkl')
+xscaler_path_mpi = os.path.join(MODELS_DIR, 'xscaler_mpi.pkl')
+yscaler_path_mpi = os.path.join(MODELS_DIR, 'yscaler_mpi.pkl')
+
+
+xscaler_path_runtime = os.path.join(MODELS_DIR, 'xscaler_runtime.pkl')
+yscaler_path_runtime = os.path.join(MODELS_DIR, 'xscaler_runtime.pkl')
 
 nprocs, maxblocks = m.get_running_settings()
 
@@ -28,33 +32,38 @@ if nprocs*maxblocks != 2000 and nprocs*maxblocks != 32000: # controlla se siamo 
 else:
     procs_to_check.append((nprocs, maxblocks))
 
-xscaler = joblib.load(xscaler_path)
+xscaler_mpi = joblib.load(xscaler_path_mpi)
+xscaler_runtime = joblib.load(xscaler_path_runtime)
 
-ib = m.InputBuilder(xscaler)
+yscaler_mpi = joblib.load(yscaler_path_mpi)
+yscaler_runtime = joblib.load(yscaler_path_runtime)
+
+ib = m.InputBuilder(xscaler_mpi)
 ib.fill_runtime_values(chassis, cpu_stat, time, day)
 
-Model = m.load_model()
-
-high_performance = [0,0,0,0,0]
-
 with torch.no_grad():
+
+    Model = m.load_model('mpi')
+
+    high_performance = [0,0,0,0,0]
 
     for couple in procs_to_check:
         ib.set(nprocs=couple[0], maxblocks=couple[1])
         for t in ib.grid_variants({"cb_nodes":[1,2,8,16], "status":[0,1]}):
             y = Model(t)
             tensor_runtimes = t.detach().numpy()
-            if np.isclose(tensor_runtimes[0][15], -0.9312661, atol=1e-6):
+            if np.isclose(tensor_runtimes[0][15], 0.99602291, atol=1e-6):
                 status = "independent"
-            elif np.isclose(tensor_runtimes[0][15], 1.0738069, atol=1e-6):
+            elif np.isclose(tensor_runtimes[0][15], -1.00399297, atol=1e-6):
                 status = "collective"
             else:
                 print('Something went wrong. Unable to catch writing mode')
                 print(tensor_runtimes[0][15])
                 exit()
-            tensor_runtimes = xscaler.inverse_transform(tensor_runtimes[0].reshape(1,-1))[0]
+            
+            tensor_runtimes = xscaler_mpi.inverse_transform(tensor_runtimes[0].reshape(1,-1))[0]
 
-            orig_y_pred = y.detach().numpy()
+            orig_y_pred = yscaler_mpi.inverse_transform(y.detach().numpy()[0][0].reshape(-1,1))
 
             if orig_y_pred[0][0] > high_performance[0]:
                 high_performance[0] = orig_y_pred[0][0]
@@ -63,14 +72,67 @@ with torch.no_grad():
                 high_performance[3] = status
                 high_performance[4] = tensor_runtimes[2]
 
-            print("unscaled output: ", orig_y_pred[0][0])
+            #print("unscaled MPI output: ", yscaler_mpi.inverse_transform(orig_y_pred[0][0].reshape(-1,1))[0][0])
+            print('runtime MPI:', orig_y_pred[0][0], "MiB/s")
 
             if status == 'independent':
-                print(f"settings -- nprocs {tensor_runtimes[0]} -- status {status} -- maxblocks {tensor_runtimes[2]}")
+                print(f"settings -- nprocs {np.round(tensor_runtimes[0], 3)} -- status {status} -- maxblocks {tensor_runtimes[2]}")
             else:
-                print(f"settings -- nprocs {tensor_runtimes[0]} -- cbnodes {tensor_runtimes[1]} -- status {status} -- maxblocks {tensor_runtimes[2]}")
+                print(f"settings -- nprocs {np.round(tensor_runtimes[0], 3)} -- cbnodes {tensor_runtimes[1]} -- status {status} -- maxblocks {tensor_runtimes[2]}")
 
 if high_performance[3] == 'independent':
     print("\n ******* \n Best settings that estimate is possible to achieve", high_performance[0] ," Mbi/s are: \n nprocs:", high_performance[1], '\n status:', high_performance[3], "\n maxblocks", high_performance[4] )
 else:
     print("\n ******* \n Best settings that estimate is possible to achieve", high_performance[0] ," Mbi/s are: \n nprocs:", high_performance[1], "\n cb_nodes:", high_performance[2], '\n status:', high_performance[3], "\n maxblocks", high_performance[4] )
+
+
+### TEMPORARY
+
+
+ib = m.InputBuilder(xscaler_runtime)
+ib.fill_runtime_values(chassis, cpu_stat, time, day)
+
+print("\n*******\n")
+
+with torch.no_grad():
+
+    Model = m.load_model('runtime')
+
+    high_performance = [0,0,0,0,0]
+    
+    for couple in procs_to_check:
+        ib.set(nprocs=couple[0], maxblocks=couple[1])
+        for t in ib.grid_variants({"cb_nodes":[1,2,8,16], "status":[0,1]}):
+            y = Model(t)
+            tensor_runtimes = t.detach().numpy()
+            if np.isclose(tensor_runtimes[0][15], 0.99602291, atol=1e-6):
+                status = "independent"
+            elif np.isclose(tensor_runtimes[0][15], -1.00399297, atol=1e-6):
+                status = "collective"
+            else:
+                print('Something went wrong. Unable to catch writing mode')
+                print(tensor_runtimes[0][15])
+                exit()
+            tensor_runtimes = xscaler_runtime.inverse_transform(tensor_runtimes[0].reshape(1,-1))[0]
+
+            orig_y_pred = yscaler_mpi.inverse_transform(y.detach().numpy()[0][0].reshape(-1,1))
+
+            if orig_y_pred[0][0] > high_performance[0]:
+                high_performance[0] = orig_y_pred[0][0]
+                high_performance[1] = tensor_runtimes[0]
+                high_performance[2] = tensor_runtimes[1]
+                high_performance[3] = status
+                high_performance[4] = tensor_runtimes[2]
+
+            #print("unscaled runtime output: ", yscaler_runtime.inverse_transform(orig_y_pred[0][0])[0])
+            print('runtime output:', orig_y_pred[0][0], "s")
+
+            if status == 'independent':
+                print(f"settings -- nprocs {np.round(tensor_runtimes[0], 3)} -- status {status} -- maxblocks {tensor_runtimes[2]}")
+            else:
+                print(f"settings -- nprocs {np.round(tensor_runtimes[0], 3)} -- cbnodes {np.round(tensor_runtimes[1], 3)} -- status {status} -- maxblocks {tensor_runtimes[2]}")
+
+if high_performance[3] == 'independent':
+    print("\n ******* \n Best settings that estimate is possible to achieve runtime ", np.round(high_performance[0], 6) ," s are: \n nprocs:", np.round(high_performance[1], 3), '\n status:', high_performance[3], "\n maxblocks", high_performance[4] )
+else:
+    print("\n ******* \n Best settings that estimate is possible to achieve runtime ", np.round(high_performance[0], 6) ," s are: \n nprocs:", np.round(high_performance[1], 3), "\n cb_nodes:", np.round(high_performance[2], 3), '\n status:', high_performance[3], "\n maxblocks", high_performance[4] )
