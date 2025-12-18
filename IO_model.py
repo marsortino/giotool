@@ -80,11 +80,6 @@ with torch.no_grad():
             else:
                 print(f"settings -- nprocs {np.round(tensor_runtimes[0], 3)} -- cbnodes {tensor_runtimes[1]} -- status {status} -- maxblocks {tensor_runtimes[2]}")
 
-if high_performance[3] == 'independent':
-    print("\n ******* \n Best settings that estimate is possible to achieve", high_performance[0] ," Mbi/s are: \n nprocs:", high_performance[1], '\n status:', high_performance[3], "\n maxblocks", high_performance[4] )
-else:
-    print("\n ******* \n Best settings that estimate is possible to achieve", high_performance[0] ," Mbi/s are: \n nprocs:", high_performance[1], "\n cb_nodes:", high_performance[2], '\n status:', high_performance[3], "\n maxblocks", high_performance[4] )
-
 
 ### TEMPORARY
 
@@ -98,7 +93,7 @@ with torch.no_grad():
 
     Model = m.load_model('runtime')
 
-    high_performance = [0,0,0,0,0]
+    low_runtime = [1e6,0,0,0,0]
     
     for couple in procs_to_check:
         ib.set(nprocs=couple[0], maxblocks=couple[1])
@@ -117,22 +112,30 @@ with torch.no_grad():
 
             orig_y_pred = yscaler_mpi.inverse_transform(y.detach().numpy()[0][0].reshape(-1,1))
 
-            if orig_y_pred[0][0] > high_performance[0]:
-                high_performance[0] = orig_y_pred[0][0]
-                high_performance[1] = tensor_runtimes[0]
-                high_performance[2] = tensor_runtimes[1]
-                high_performance[3] = status
-                high_performance[4] = tensor_runtimes[2]
+            if orig_y_pred[0][0] < low_runtime[0]:
+                low_runtime[0] = orig_y_pred[0][0]
+                low_runtime[1] = tensor_runtimes[0]
+                low_runtime[2] = tensor_runtimes[1]
+                low_runtime[3] = status
+                low_runtime[4] = tensor_runtimes[2]
 
             #print("unscaled runtime output: ", yscaler_runtime.inverse_transform(orig_y_pred[0][0])[0])
             print('runtime output:', orig_y_pred[0][0], "s")
 
             if status == 'independent':
-                print(f"settings -- nprocs {np.round(tensor_runtimes[0], 3)} -- status {status} -- maxblocks {tensor_runtimes[2]}")
+                print(f"settings -- nprocs {np.round(tensor_runtimes[0], 2)} -- status {status} -- maxblocks {tensor_runtimes[2]}")
             else:
-                print(f"settings -- nprocs {np.round(tensor_runtimes[0], 3)} -- cbnodes {np.round(tensor_runtimes[1], 3)} -- status {status} -- maxblocks {tensor_runtimes[2]}")
+                print(f"settings -- nprocs {np.round(tensor_runtimes[0], 2)} -- cbnodes {np.round(tensor_runtimes[1], 2)} -- status {status} -- maxblocks {tensor_runtimes[2]}")
+
+print("\n ******** \n Final Result:")
 
 if high_performance[3] == 'independent':
-    print("\n ******* \n Best settings that estimate is possible to achieve runtime ", np.round(high_performance[0], 6) ," s are: \n nprocs:", np.round(high_performance[1], 3), '\n status:', high_performance[3], "\n maxblocks", high_performance[4] )
+    print("\n ******* \n Best settings that estimate is possible to achieve highest I/O performance (", high_performance[0] ,"Mbi/s ) are: \n nprocs:", np.round(high_performance[1], 2), '\n status:', high_performance[3], "\n maxblocks", high_performance[4] )
 else:
-    print("\n ******* \n Best settings that estimate is possible to achieve runtime ", np.round(high_performance[0], 6) ," s are: \n nprocs:", np.round(high_performance[1], 3), "\n cb_nodes:", np.round(high_performance[2], 3), '\n status:', high_performance[3], "\n maxblocks", high_performance[4] )
+    print("\n ******* \n Best settings that estimate is possible to achieve highest I/O performance (", high_performance[0] ,"Mbi/s ) are: \n nprocs:", np.round(high_performance[1], 2), "\n cb_nodes:", np.round(high_performance[2], 2), '\n status:', high_performance[3], "\n maxblocks", high_performance[4] )
+
+
+if low_runtime[3] == 'independent':
+    print("\n ******* \n Best settings that estimate is possible to achieve lowest runtime (", np.round(low_runtime[0], 6) ,"s ) are: \n nprocs:", np.round(low_runtime[1], 2), '\n status:', low_runtime[3], "\n maxblocks", low_runtime[4] )
+else:
+    print("\n ******* \n Best settings that estimate is possible to achieve lowest runtime (", np.round(low_runtime[0], 6) ,"s ) are: \n nprocs:", np.round(low_runtime[1], 2), "\n cb_nodes:", np.round(low_runtime[2], 2), '\n status:', low_runtime[3], "\n maxblocks", low_runtime[4] )
